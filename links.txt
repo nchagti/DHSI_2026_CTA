@@ -1,0 +1,9 @@
+Google Ngrams: https://books.google.com/ngrams/
+COCA: https://www.english-corpora.org/coca/
+BNC: https://www.english-corpora.org/bnc/
+NOW: https://www.english-corpora.org/now/
+AntConc: https://www.laurenceanthony.net/software/antconc/
+Voyant Tools: https://voyant-tools.org/
+(No)Sketch Engine: https://www.sketchengine.eu/nosketch-engine/
+Survivorship Bias: https://en.wikipedia.org/wiki/Survivorship_bias
+Small Corpora - Big Challenges: https://www.researchgate.net/publication/396309936_Maly_korpus_-_wielkie_wyzwania_Small_corpora_-_big_challenges
