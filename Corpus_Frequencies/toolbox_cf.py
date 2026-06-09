@@ -5,6 +5,7 @@ from pathlib import Path
 from collections import defaultdict, Counter
 import tqdm
 import os
+import random
 
 def _tokenize(text):
     
@@ -213,4 +214,52 @@ def zipf_plot(input, top_n=None, figsize=(9, 6), title=None, loglog = True):
     ax.grid(True, which="both", linestyle="--", alpha=0.4, zorder=0)
     fig.tight_layout()
     return fig
+
+def tokenize_all (input_path, randomize = False):
+    path = Path (input_path)
+    if path.is_file ():
+        files = [path]
+    elif path.is_dir ():
+        files = list (path.glob ('*.txt'))
+    tokens = []
+    if len (files) > 1:
+        iterable = tqdm.tqdm (files)
+    else:
+        iterable = files
+    for input_file in iterable:
+        with open(input_file, encoding="utf-8") as f:
+            tokens += _tokenize(f.read())
+    if randomize:
+        random.shuffle (tokens)
+    return tokens
+
+def heaps_plot (tokens, start_pct = 1):
+
+    tokens_count = []
+    vocabulary_size = []
+    seen_lemmas = set ()
+
+    for i, lemma in enumerate (tokens, 1):
+        seen_lemmas.add (lemma)
+        tokens_count.append (i)
+        vocabulary_size.append (len (seen_lemmas))
+
+    M_data = np.array (tokens_count)
+    V_data = np.array (vocabulary_size)
+
+    end_idx = int (len (M_data) * start_pct)
+    M_sliced = M_data[:end_idx]
+    V_sliced = V_data[:end_idx]
+
+    plt.figure (figsize = (10, 6))
+    plt.plot (M_sliced, V_sliced, 
+              color = 'red', linewidth = 1)
+    plt.ticklabel_format (style = 'plain', axis = 'both')
+    plt.title ('Heaps\'s Law', fontsize = 14)
+    plt.xlabel ('Number of tokens', fontsize = 12)
+    plt.ylabel ('Number of types', fontsize = 12)
+    plt.grid (True, linestyle = ':', alpha = 0.6)
+    plt.legend (fontsize = 11)
+    plt.show ()
+
 
