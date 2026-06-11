@@ -156,7 +156,7 @@ def _list_txt_files(folder):
 # Public API: load_corpus
 # ---------------------------------------------------------------------------
 
-def load_corpus(input_folder, exclude_stop_words=True, min_word_len=3, drop_ners = True, custom_stopwords = []):
+def load_corpus(input_folder, exclude_stop_words=True, min_word_len=3, drop_ners = True, custom_stopwords = [], chunk_size = None):
     """Read and tokenise every .txt file in a folder.
 
     Parameters
@@ -194,7 +194,12 @@ def load_corpus(input_folder, exclude_stop_words=True, min_word_len=3, drop_ners
             tokens = [t for t in tokens if t not in stopwords]
         if min_word_len > 1:
             tokens = [t for t in tokens if len(t) >= min_word_len]
-        processed[os.path.basename(p)] = tokens
+        if chunk_size:
+            for i in range (len (tokens) // chunk_size):
+                chunk = tokens[i * chunk_size : (i + 1) * chunk_size]
+                processed[f'{os.path.basename (p)}_{i + 1}'] = chunk
+        else:
+            processed[os.path.basename(p)] = tokens
 
     total = sum(len(t) for t in processed.values())
     print(f"Loaded {len(processed)} documents, {total:,} tokens total.")
@@ -546,3 +551,85 @@ def generate_html (model, processed, dictionary, filename = 'lda_visualization.h
     # 3. Alternative: Save the visualization as a standalone HTML file
     # This is perfect for sharing results with colleagues or embedding in a research folder
     pyLDAvis.save_html (vis_data, filename)
+
+def get_dominant_topics (text_tokens, lda_model, dictionary, top_n = 3):
+    '''
+    Identifies the top N topics that have the highest cumulative probability across the entire text.
+    '''
+    bow = dictionary.doc2bow (text_tokens)
+    topic_distribution = lda_model.get_document_topics (bow, minimum_probability = 0.0)
+    
+    # Sort topics by probability in descending order and grab the top N
+    sorted_topics = sorted (topic_distribution, key = lambda x: x[1], reverse = True)
+    top_topics_ids = [topic[0] for topic in sorted_topics[:top_n]]
+    
+    return top_topics_ids
+
+
+def rolling_topic_distribution (text_tokens, lda_model, dictionary, target_topics, no_steps = 10, overlap_ratio = 0.5):
+    '''
+    Slices a single tokenized text into overlapping windows and tracks the trajectory of target topics.
+    '''
+    total_tokens = len (text_tokens)
+    
+    # Determine window size based on steps and desired overlap
+    # To cover the text in no_steps with a given overlap:
+    # total_tokens = window_size + (no_steps - 1) * step_size
+    # where step_size = window_size * (1 - overlap_ratio)
+    step_size = int (total_tokens / (no_steps - (no_steps - 1) * overlap_ratio))
+    window_size = int (step_size / (1 - overlap_ratio)) if overlap_ratio < 1 else step_size
+
+    # Fallback safety for shorter texts or edge cases
+    if window_size >= total_tokens or window_size == 0:
+        window_size = total_tokens // 2
+        step_size = window_size // 2
+
+    # Initialize a data structure to store trajectories: {topic_id: [prob_step1, prob_step2, ...]}
+    trajectories = {topic_id: [] for topic_id in target_topics}
+    x_labels = []
+
+    for step_idx in range (no_steps):
+        start_idx = step_idx * step_size
+        end_idx = start_idx + window_size
+        
+        # Ensure we don't overshoot the text length drastically
+        chunk = text_tokens[start_idx:end_idx]
+        if not chunk:
+            break
+            
+        chunk_bow = dictionary.doc2bow (chunk)
+        chunk_topics = dict (lda_model.get_document_topics (chunk_bow, minimum_probability = 0.0))
+        
+        # Record the probability for each of our primary topics
+        for topic_id in target_topics:
+            trajectories[topic_id].append (chunk_topics.get (topic_id, 0.0))
+            
+        # Create a label representing the narrative progress percentage
+        progress_pct = int ((start_idx + (len (chunk) / 2)) / total_tokens * 180)  # midpoint representation
+        x_labels.append (f'{progress_pct}%')
+
+    return trajectories, x_labels
+
+
+def plot_topic_trajectory (trajectories, x_labels, lda_model, name, num_words = 3):
+    '''
+    Visualizes the sequential changes of the selected topics across the text timeline.
+    '''
+    plt.figure (figsize = (11, 5))
+    
+    for topic_id, probabilities in trajectories.items ():
+        # Fetch top words for the legend label to make it human-readable
+        topic_terms = lda_model.show_topic (topic_id, topn = num_words)
+        topic_label = f'Topic {topic_id}: ' + ', '.join ([term[0] for term in topic_terms])
+        
+        # Plot the trajectory line
+        plt.plot (probabilities, marker = 'o', linewidth = 2, label = topic_label)
+
+    plt.title (f'Thematic Shift [{name}]', fontsize = 13, pad = 15)
+    plt.xlabel ('Narrative Timeline (Text Progress)', fontsize = 11)
+    plt.ylabel ('Topic Probability (Density)', fontsize = 11)
+    plt.xticks (range (len (x_labels)), x_labels)
+    plt.grid (True, linestyle = '--', alpha = 0.5)
+    plt.legend (loc = 'upper left', bbox_to_anchor = (1.02, 1), borderaxespad = 0.0)
+    plt.tight_layout ()
+    plt.show ()
